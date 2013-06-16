@@ -6,11 +6,8 @@ conteúdo do arquivo;
 * class Vec3
 * class Particle (com posição Vec3)
 * class Constraint (ligando duas partículas)
-* class Cloth (tecido com partículas e arestas)
+* class MassSpring (tecido com partículas e arestas)
 
-* Cloth object and ball (instance of Cloth Class)
-
-* OpenGL/Glut methods, including display() and main() (calling methods on Cloth object)
 */
 
 
@@ -26,9 +23,13 @@ conteúdo do arquivo;
 
 
 /* Constantes de física */
-#define DAMPING 0.00 // força oposta, pra não ficar chacoalhando eternamente
+#define DAMPING 0.01 // força oposta, pra não ficar chacoalhando eternamente
 #define TIME_STEPSIZE2 0.5*0.5 // how large time step each particle takes each frame
-#define CONSTRAINT_ITERATIONS 15 // how many iterations of constraint satisfaction each frame (more is rigid, less is soft)
+#define CONSTRAINT_ITERATIONS 4 // how many iterations of constraint satisfaction each frame (more is rigid, less is soft)
+#define SELECTION_UP 1
+#define SELECTION_DOWN 2
+#define SELECTION_LEFT 3
+#define SELECTION_RIGHT 4
 
 
 class Vec3 // simplesmente um vetor com 3 floats x, y e z.
@@ -99,21 +100,22 @@ public:
 	}
 };
 
-/* The particle class represents a particle of mass that can move around in 3D space*/
 class Particle
 {
 private:
-	bool movable; // can the particle move or not ? used to pin parts of the cloth
+	bool movable; // usado pra marcar uma particula que pode ser movimentada (é afetada por forças)
+	bool selected; // pra identificar partículas que estao selecionadas
 
-	float mass; // the mass of the particle (is always 1 in this example)
+	float mass; // a massa da particula. Usamos 1 por default
 	Vec3 pos; // posição da particula no espaço 3D
-	Vec3 old_pos; // Posição anterior da partícula, usado para calcular a integração.
+	Vec3 old_pos; // Posição anterior da partícula, usado para calcular a integração de verlet.
 	Vec3 acceleration; // Vetor de aceleração da partícula
-	Vec3 accumulated_normal; // an accumulated normal (i.e. non normalized), used for OpenGL soft shading
+	Vec3 accumulated_normal; // Usado pra OpenGL soft shading
+
 
 public:
-	Particle(Vec3 pos) : pos(pos), old_pos(pos),acceleration(Vec3(0,0,0)), mass(1), movable(true), accumulated_normal(Vec3(0,0,0)){}
-	Particle(){}
+	Particle(Vec3 pos) : pos(pos), old_pos(pos),acceleration(Vec3(0,0,0)), mass(1), movable(true), accumulated_normal(Vec3(0,0,0)), selected(false){}
+	Particle() {}
 
 	void addForce(Vec3 f)
 	{
@@ -121,7 +123,7 @@ public:
 	}
 
 	/* This is one of the important methods, where the time is progressed a single step size (TIME_STEPSIZE)
-	   The method is called by Cloth.time_step()
+	   The method is called by MassSpring.time_step()
 	   Given the equation "force = mass * acceleration" the next position is found through verlet integration*/
 	void timeStep()
 	{
@@ -142,6 +144,10 @@ public:
 
 	void makeUnmovable() {movable = false;}
 
+	void toggleSelected() { selected = !selected; }
+
+	bool isSelected() { return selected; }
+
 	void addToNormal(Vec3 normal)
 	{
 		accumulated_normal += normal.normalized();
@@ -156,10 +162,10 @@ public:
 class Constraint
 {
 private:
-	float rest_distance; // the length between particle p1 and p2 in rest configuration
+	float rest_distance; // A largura entre partícula p1 e p2 em posição de repouso
 
 public:
-	Particle *p1, *p2; // the two particles that are connected through this constraint
+	Particle *p1, *p2; // As duas partículas ligadas por essa aresta
 
 	Constraint(Particle *p1, Particle *p2) :  p1(p1),p2(p2)
 	{
@@ -168,7 +174,7 @@ public:
 	}
 
 	/* This is one of the important methods, where a single constraint between two particles p1 and p2 is solved
-	the method is called by Cloth.time_step() many times per frame*/
+	the method is called by MassSpring.time_step() many times per frame*/
 	void satisfyConstraint()
 	{
 		Vec3 p1_to_p2 = p2->getPos()-p1->getPos(); // vector from p1 to p2
@@ -181,7 +187,7 @@ public:
 
 };
 
-class Cloth
+class MassSpring
 {
 private:
 
@@ -189,8 +195,12 @@ private:
 	int num_particles_height; // number of particles in "height" direction
 	// total number of particles is num_particles_width*num_particles_height
 
+	//variáveis pra controlar a partícula selecionada
+	int selected_x;
+	int selected_y;
+
 	std::vector<Particle> particles; // all particles that are part of this cloth
-	std::vector<Constraint> constraints; // alle constraints between particles as part of this cloth
+	std::vector<Constraint> constraints; // all constraints between particles as part of this cloth
 
 	bool spherized_particle;
 
@@ -198,9 +208,9 @@ private:
 	void makeConstraint(Particle *p1, Particle *p2) {constraints.push_back(Constraint(p1,p2));}
 
 
-	/* A private method used by drawShaded() and addWindForcesForTriangle() to retrieve the  
-	normal vector of the triangle defined by the position of the particles p1, p2, and p3.
-	The magnitude of the normal vector is equal to the area of the parallelogram defined by p1, p2 and p3
+	/* Método usado por drawShaded() e addWindForcesForTriangle() pra calcular o
+	vetor normal do triângulo definido pela posição das partículas p1, p2, and p3.
+	A magnitude do vetor normal é igual a area do paralelograma definido por p1, p2 e p3
 	*/
 	Vec3 calcTriangleNormal(Particle *p1,Particle *p2,Particle *p3)
 	{
@@ -214,8 +224,8 @@ private:
 		return v1.cross(v2);
 	}
 
-	/* A private method used by windForce() to calcualte the wind force for a single triangle 
-	defined by p1,p2,p3*/
+	/* Método usado pelo windForce() para calcular a força do vendo em um único triângulo, definido por 
+	p1,p2,p3*/
 	void addWindForcesForTriangle(Particle *p1,Particle *p2,Particle *p3, const Vec3 direction)
 	{
 		Vec3 normal = calcTriangleNormal(p1,p2,p3);
@@ -226,7 +236,7 @@ private:
 		p3->addForce(force);
 	}
 
-	/* A private method used by drawShaded(), that draws a single triangle p1,p2,p3 with a color*/
+	/* Método usado pelo drawShaded pra pintar um triângulo com uma cor*/
 	void drawTriangle(Particle *p1, Particle *p2, Particle *p3, const Vec3 color)
 	{
 		glColor3fv( (GLfloat*) &color );
@@ -245,20 +255,24 @@ private:
 	{
 		glPushMatrix();
 		glTranslatef(particle.getPos().f[0], particle.getPos().f[1], particle.getPos().f[2]); //Posiciona a esfera glut na posição da particula
-		glColor3f(1.0f,0.2f,0.5f);
+		if(particle.isSelected())
+			glColor3f(0.2f,1.0f,0.5f);
+		else
+			glColor3f(1.0f,0.2f,0.5f);
 		glutSolidSphere(sphereRadius,5,5);
 		glPopMatrix();
 	}
 
 public:
-	
-	/* This is a important constructor for the entire system of particles and constraints*/
-	Cloth(float width, float height, int num_particles_width, int num_particles_height) : num_particles_width(num_particles_width), num_particles_height(num_particles_height)
+		
+	MassSpring(float width, float height, int num_particles_width, int num_particles_height) : num_particles_width(num_particles_width), num_particles_height(num_particles_height)
 	{
 		spherized_particle = false;
-		particles.resize(num_particles_width*num_particles_height); //I am essentially using this vector as an array with room for num_particles_width*num_particles_height particles
+		selected_x = 0;
+		selected_y = 0;
+		particles.resize(num_particles_width*num_particles_height); //Array contendo todas as partículas
 
-		// creating particles in a grid of particles from (0,0,0) to (width,-height,0)
+		// criando partículas em um grid de particulas (0,0,0) até (width,-height,0)
 		for(int x=0; x<num_particles_width; x++)
 		{
 			for(int y=0; y<num_particles_height; y++)
@@ -266,11 +280,14 @@ public:
 				Vec3 pos = Vec3(width * (x/(float)num_particles_width),
 								-height * (y/(float)num_particles_height),
 								0);
-				particles[y*num_particles_width+x]= Particle(pos); // insert particle in column x at y'th row
+				particles[y*num_particles_width+x]= Particle(pos); // insere partículas na coluna x e linha y
+				//a primeira particula tem que ser selecionada
+				if(y == 0 && x == 0)
+					particles[y*num_particles_width+x].toggleSelected();
 			}
 		}
 
-		// Connecting immediate neighbor particles with constraints (distance 1 and sqrt(2) in the grid)
+		// Conectando arestas de partículas vizinhas imediatas (distância 1 e sqrt(2) no grid)
 		for(int x=0; x<num_particles_width; x++)
 		{
 			for(int y=0; y<num_particles_height; y++)
@@ -283,7 +300,7 @@ public:
 		}
 
 
-		// Connecting secondary neighbors with constraints (distance 2 and sqrt(4) in the grid)
+		// Conectando arestas de partículas vizinhas secundários (distância 2 e sqrt(4) no grid)
 		for(int x=0; x<num_particles_width; x++)
 		{
 			for(int y=0; y<num_particles_height; y++)
@@ -295,13 +312,13 @@ public:
 		}
 
 
-		// making the upper left most three and right most three particles unmovable
+		// Setando as 3 partículas mais da esquerda superior e direita superior como não movíveis
 		for(int i=0;i<3; i++)
 		{
-			getParticle(0+i ,0)->offsetPos(Vec3(0.5,0.0,0.0)); // moving the particle a bit towards the center, to make it hang more natural - because I like it ;)
+			getParticle(0+i ,0)->offsetPos(Vec3(0.5,0.0,0.0)); //move a particula um pouco mais pro centro pra parecer mais natural
 			getParticle(0+i ,0)->makeUnmovable(); 
 
-			getParticle(0+i ,0)->offsetPos(Vec3(-0.5,0.0,0.0)); // moving the particle a bit towards the center, to make it hang more natural - because I like it ;)
+			getParticle(0+i ,0)->offsetPos(Vec3(-0.5,0.0,0.0)); //move a particula um pouco mais pro centro pra parecer mais natural
 			getParticle(num_particles_width-1-i ,0)->makeUnmovable();
 		}
 	}
@@ -312,9 +329,9 @@ public:
 		spherized_particle = !spherized_particle;
 	}
 
-	/* drawing the cloth as a smooth shaded (and colored according to column) OpenGL triangular mesh
-	Called from the display() method
-	The cloth is seen as consisting of triangles for four particles in the grid as follows:
+	/* desenha o tecido como uma malha smooth shaded (e colorido de acordo com a cor)  triangular OPEN GL
+	Chamado pelo método display()
+	O tecido consiste de triangulos para quatro partículas, conforme vistas no grid abaixo
 
 	(x,y)   *--* (x+1,y)
 	        | /|
@@ -324,13 +341,14 @@ public:
 	*/
 	void drawShaded()
 	{
-		// reset normals (which where written to last frame)
+		// reseta os normais que foram escritos no frame anterior
 		std::vector<Particle>::iterator particle;
 		for(particle = particles.begin(); particle != particles.end(); particle++)
 		{
 			(*particle).resetNormal();
 		}
 
+		//cria os normais por partícula através da adição de todos os triangulos normais (hard)  os quais cada partícula faz parte
 		//create smooth per particle normals by adding up all the (hard) triangle normals that each particle is part of
 		for(int x = 0; x<num_particles_width-1; x++)
 		{
@@ -345,10 +363,18 @@ public:
 				getParticle(x+1,y+1)->addToNormal(normal);
 				getParticle(x+1,y)->addToNormal(normal);
 				getParticle(x,y+1)->addToNormal(normal);
+			}
+		}
 
-				//Cria as bolinhas nas partículas caso a opção esteja ligada
-				if(spherized_particle)
-					spherizeParticle(*getParticle(x, y), 0.05);
+		if(spherized_particle)
+		{
+			for(int x = 0; x<num_particles_width; x++)
+			{
+				for(int y=0; y<num_particles_height; y++)
+				{
+					//Cria as bolinhas nas partículas caso a opção esteja ligada
+					spherizeParticle(*getParticle(x, y), 0.07);
+				}
 			}
 		}
 
@@ -359,7 +385,7 @@ public:
 			{
 				Vec3 color(0,0,0);
 				if (x%2) // red and white color is interleaved according to which column number
-					color = Vec3(0.6f,0.2f,0.2f);
+					color = Vec3(0.3f,0.5f,0.2f);
 				else
 					color = Vec3(1.0f,1.0f,1.0f);
 
@@ -370,8 +396,7 @@ public:
 		glEnd();
 	}
 
-	/* this is an important methods where the time is progressed one time step for the entire cloth.
-	This includes calling satisfyConstraint() for every constraint, and calling timeStep() for all particles
+	/* aqui é onde ocorre um passo de tempo para todas as partículas.
 	*/
 	void timeStep()
 	{
@@ -381,29 +406,39 @@ public:
 #pragma omp parallel for
 			for(int j = 0; j < constraints.size(); j++ )
 			{
-				constraints[j].satisfyConstraint(); // satisfy constraint.
+				constraints[j].satisfyConstraint();
 			}
 		}
 
 		std::vector<Particle>::iterator particle;
 		for(particle = particles.begin(); particle != particles.end(); particle++)
 		{
-			(*particle).timeStep(); // calculate the position of each particle at the next time step.
+			(*particle).timeStep(); // calcula a posição de cada partícula no passo seguinte.
 		}
 	}
 
-	/* used to add gravity (or any other arbitrary vector) to all particles*/
+	/* usado pra aplicar gravidade, ou qualquer outro vetor, a todas as partículas*/
 	void addForce(const Vec3 direction)
 	{
 		std::vector<Particle>::iterator particle;
 		for(particle = particles.begin(); particle != particles.end(); particle++)
 		{
-			(*particle).addForce(direction); // add the forces to each particle
+			(*particle).addForce(direction); // adiciona o vetor de força a cada partícula
 		}
 
 	}
 
-	/* used to add wind forces to all particles, is added for each triangle since the final force is proportional to the triangle area as seen from the wind direction*/
+	/* força aplicada apenas à particula selecionada */
+	void addForceToSelectedParticle(const Vec3 direction)
+	{
+		Particle* p = getParticle(selected_x, selected_y);		
+		Vec3 normal = p->getNormal();
+		Vec3 d = normal.normalized();
+		Vec3 force = normal*(d.dot(direction));
+		p->addForce(force);
+	}
+
+	/* Usado pra adicionar força do vento a todas partículas, é adicionado pra cada triangulo já que a força final é proporcional a área do triângulo de acordo com a direção do vento*/
 	void windForce(const Vec3 direction)
 	{
 		for(int x = 0; x<num_particles_width-1; x++)
@@ -434,29 +469,61 @@ public:
 		}
 	}
 
+	void select(int direction)
+	{
+		Particle* p = getParticle(selected_x, selected_y);
+		p->toggleSelected();
+
+		switch(direction)
+		{
+			case SELECTION_UP:
+				selected_y--;
+				if(selected_y < 0)
+					selected_y = num_particles_height-1;
+			break;
+			case SELECTION_DOWN:
+				selected_y++;
+				if(selected_y == num_particles_height)
+					selected_y = 0;				
+			break;
+			case SELECTION_LEFT:
+				selected_x--;
+				if(selected_x < 0)
+					selected_x = num_particles_width-1;				
+			break;
+			case SELECTION_RIGHT:
+				selected_x++;
+				if(selected_x == num_particles_width)
+					selected_x = 0;
+			break;
+		}
+
+		p = getParticle(selected_x, selected_y);
+		p->toggleSelected();
+	}
+
 	void doFrame()
 	{
 
 	}
 };
 
-/***** Above are definition of classes; Vec3, Particle, Constraint, and Cloth *****/
+/***** Acima estão as definições das classes; Vec3, Particle, Constraint, and MassSpring *****/
+
+ 
+MassSpring massSpring1(14,10,30,20); // Com esses valores ficou extremamente lento: 14, 10, 55, 45
+Vec3 ball_pos(7,-5,0); // O centro da bola
+float ball_radius = 1.5; // O raio da bola
 
 
 
+/***** Toda a parte de controle opengl é feita abaixo *****/
 
-// Just below are three global variables holding the actual animated stuff; Cloth and Ball 
-Cloth cloth1(14,10,55,45); // one Cloth object of the Cloth class 14, 10, 55, 45
-Vec3 ball_pos(7,-5,0); // the center of our one ball
-float ball_radius = 1.5; // the radius of our one ball
-
-
-
-/***** Below are functions Init(), display(), reshape(), keyboard(), arrow_keys(), main() *****/
-
-/* This is where all the standard Glut/OpenGL stuff is, and where the methods of Cloth are called; 
-addForce(), windForce(), timeStep(), ballCollision(), and drawShaded()*/
-
+float ball_time = 0; // contador usado pra calcular a posição z da bola
+float view_distance = 0;
+static BOOL g_bButton1Down = FALSE;
+static int g_yClick = 0;
+#define VIEWING_DISTANCE_MIN  1.0
 
 void init(GLvoid)
 {
@@ -486,9 +553,6 @@ void init(GLvoid)
 	glLightModeli(GL_LIGHT_MODEL_TWO_SIDE,GL_TRUE);
 }
 
-
-float ball_time = 0; // contador usado pra calcular a posição z da bola
-
 void drawBall()
 {
 	glPushMatrix();
@@ -498,32 +562,67 @@ void drawBall()
 	glPopMatrix();
 }
 
+bool windEnabled;
+void toggleWindEnabled()
+{
+	windEnabled = !windEnabled;
+}
+
+bool gravityEnabled;
+void toggleGravityEnabled()
+{
+	gravityEnabled = !gravityEnabled;
+}
+
+bool ballEnabled;
+void toggleBallEnabled()
+{
+	ballEnabled = !ballEnabled;
+}
+
+void escreve(int x, int y, float r, float g, float b, void* font, char *string)
+{
+  glColor3f( r, g, b );
+  glRasterPos2f(x, y);
+  int len, i;
+  len = (int)strlen(string);
+  for (i = 0; i < len; i++) {
+	  glutBitmapCharacter(font, string[i]);
+  }
+}
+
+void writeMenu()
+{
+	escreve(-3, 0, 1.0f, 0.0f, 0.0f, GLUT_BITMAP_HELVETICA_12, "F1: Esfera");
+	escreve(-3, -1, 1.0f, 0.0f, 0.0f, GLUT_BITMAP_HELVETICA_12, "F2: Vento");
+	escreve(-3, -2, 1.0f, 0.0f, 0.0f, GLUT_BITMAP_HELVETICA_12, "F3: Gravidade");
+	escreve(-3, -3, 1.0f, 0.0f, 0.0f, GLUT_BITMAP_HELVETICA_12, "b: Bola Particula");
+	escreve(-3, -4, 1.0f, 0.0f, 0.0f, GLUT_BITMAP_HELVETICA_12, "w: Wireframe");
+}
+
 /* Desenha*/
 void Display(void)
 {
 	// Calculando posições
-
-	ball_time++;
-	ball_pos.f[2] = cos(ball_time/50.0)*7;
-
-	cloth1.addForce(Vec3(0,-0.2,0)*TIME_STEPSIZE2); // Adiciona gravidade a cade frame, na direção pra baixo
-	cloth1.windForce(Vec3(0.5,0,0.2)*TIME_STEPSIZE2); // gera vento a cada frame
-	cloth1.timeStep(); // calcula a posição da particula no frame seguinte
-	cloth1.ballCollision(ball_pos,ball_radius); // trata a colisão com a bola
-
-
+	if(gravityEnabled)
+		massSpring1.addForce(Vec3(0,-0.2,0)*TIME_STEPSIZE2); // Adiciona gravidade a cade frame, na direção pra baixo
+	
+	if(windEnabled)
+		massSpring1.windForce(Vec3(0.5,0,0.2)*TIME_STEPSIZE2); // gera vento a cada frame
+	massSpring1.timeStep(); // calcula a posição da particula no frame seguinte
 
 	// Desenhando
-
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glLoadIdentity();
 
+	gluLookAt(0, 0, view_distance, 0, 0, -1, 0, 1, 0);
+
 	glDisable(GL_LIGHTING); // Pinta o fundo bonito
 	glBegin(GL_POLYGON);
-	glColor3f(0.8f,0.8f,1.0f);
-	glVertex3f(-200.0f,-100.0f,-100.0f);
-	glVertex3f(200.0f,-100.0f,-100.0f);
-	glColor3f(0.4f,0.4f,0.8f);	
+	glColor3f(0.7f,0.7f,1.0f);
+	glVertex3f(-250.0f,-120.0f,-130.0f);
+	glVertex3f(250.0f,-120.0f,-130.0f);
+	glColor3f(0.3f,0.8f,0.3f);	
 	glVertex3f(200.0f,100.0f,-100.0f);
 	glVertex3f(-200.0f,100.0f,-100.0f);
 	glEnd();
@@ -531,11 +630,19 @@ void Display(void)
 
 	glTranslatef(-6.5,6,-9.0f); // Posiciona a câmera centralizada no tecido
 	glRotatef(25,0,1,0); // Rotaciona pra ver o tecido pelo lado
-	cloth1.drawShaded(); // Desenha o tecido shaded.
+	massSpring1.drawShaded(); // Desenha o tecido shaded.
 	
 	//Desenha uma bola de raio ball_radius
-	drawBall();
+	if(ballEnabled)
+	{
+		massSpring1.ballCollision(ball_pos,ball_radius); // trata a colisão com a bola
+		ball_time++;
+		ball_pos.f[2] = cos(ball_time/50.0)*7;
+		drawBall();
+	}
 
+	writeMenu();
+	
 	glutSwapBuffers();
 	glutPostRedisplay();
 }
@@ -573,11 +680,15 @@ void keyboard( unsigned char key, int x, int y )
 	switch ( key ) {
 	case 27:    
 		exit ( 0 );
+	case 32:
+		//Aplica uma força na partícula selecionada.
+		massSpring1.addForceToSelectedParticle(Vec3(2,0,0.8)*TIME_STEPSIZE2);
+		break;
 	case 119:
 		toggleWireframeMode();		
 		break;
 	case 'b':
-		cloth1.toggleSpherizedParticle();
+		massSpring1.toggleSpherizedParticle();
 		break;
 	default: 
 		break;
@@ -585,24 +696,64 @@ void keyboard( unsigned char key, int x, int y )
 }
 
 
-void Setas( int a_keys, int x, int y ) 
+void Special( int a_keys, int x, int y ) 
 {
 	switch(a_keys) {
 	case GLUT_KEY_UP:
-		//tela cheia
-		glutFullScreen();
+		//Move a seleção pra cima
+		massSpring1.select(SELECTION_UP);
 		break;
 	case GLUT_KEY_DOWN: 
-		//Muda pra 1280x720
-		glutReshapeWindow (1280, 720 );
+		//Muda a seleção pra baixo
+		massSpring1.select(SELECTION_DOWN);
+		break;
+	case GLUT_KEY_LEFT:
+		//Muda a seleção pra esquerda
+		massSpring1.select(SELECTION_LEFT);
+		break;
+	case GLUT_KEY_RIGHT: 
+		//Muda a seleção pra direita
+		massSpring1.select(SELECTION_RIGHT);
+		break;
+	case GLUT_KEY_F1:
+		toggleBallEnabled();
+		break;
+	case GLUT_KEY_F2:
+		toggleWindEnabled();
+		break;
+	case GLUT_KEY_F3:
+		toggleGravityEnabled();
 		break;
 	default:
 		break;
 	}
 }
 
+void MouseButton(int button, int state, int x, int y)
+{
+  // Respond to mouse button presses.
+  // If button1 pressed, mark this state so we know in motion function.
+  if (button == GLUT_LEFT_BUTTON)
+    {
+      g_bButton1Down = (state == GLUT_DOWN) ? TRUE : FALSE;
+	  g_yClick = y - 3 * view_distance;
+    }
+}
+void MouseMotion(int x, int y)
+{
+  // If button1 pressed, zoom in/out if mouse is moved up/down.
+  if (g_bButton1Down)
+    {
+      view_distance = (y - g_yClick) / 3.0;
+      if (view_distance < VIEWING_DISTANCE_MIN)
+         view_distance = VIEWING_DISTANCE_MIN;
+      glutPostRedisplay();
+    }
+}
+
 int main ( int argc, char** argv ) 
 {
+	ballEnabled = gravityEnabled = windEnabled = false;
 	glutInit( &argc, argv );
 
 	
@@ -615,7 +766,9 @@ int main ( int argc, char** argv )
 	glutReshapeFunc(reshape);
 
 	glutKeyboardFunc(keyboard);
-	glutSpecialFunc(Setas);
+	glutSpecialFunc(Special);
+	glutMouseFunc (MouseButton);
+    glutMotionFunc (MouseMotion);
 
 	glutMainLoop();
 }
