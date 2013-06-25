@@ -77,7 +77,16 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="ClothSimulation.cpp" />
+    <ClCompile Include="Main.cpp" />
+    <ClCompile Include="MassaMola.cpp" />
+    <ClCompile Include="Mola.cpp" />
+    <ClCompile Include="Vertice.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="MassaMola.h" />
+    <ClInclude Include="Mola.h" />
+    <ClInclude Include="Vector3.h" />
+    <ClInclude Include="Vertice.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
