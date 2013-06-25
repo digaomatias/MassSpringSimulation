@@ -28,6 +28,16 @@ void Vertice::toggleSelecionado() { selecionada = !selecionada; }
 
 bool Vertice::isSelecionado() { return selecionada; }
 
+Vector3 Vertice::getAceleracao()
+{
+	return aceleracao;
+}
+
+float Vertice::getMassa()
+{
+	return massa;
+}
+
 void Vertice::adicionaNormal(Vector3 normal)
 {
 	normal_acumulada += normal.normalized();

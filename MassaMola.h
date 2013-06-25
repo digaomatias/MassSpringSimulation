@@ -14,7 +14,7 @@
 #include "Mola.h"
 
 /* Constantes de física */
-#define ITERACOES_MOLA 4 // Essa é a nossa versão de K. Vai determinar quantas vezes o processamento da mola é rodado por passo de tempo.
+#define ITERACOES_MOLA 5 // Essa é a nossa versão de K. Vai determinar quantas vezes o processamento da mola é rodado por passo de tempo.
 #define SELECTION_UP 1
 #define SELECTION_DOWN 2
 #define SELECTION_LEFT 3
@@ -41,31 +41,31 @@ private:
 	void criaMola(Vertice *p1, Vertice *p2);
 
 
-	/* Método usado por drawShaded() e addWindForcesForTriangle() pra calcular o
+	/* Método usado por drawShaded() e addVentoTriangulo() pra calcular o
 	vetor normal do triângulo definido pela posição das partículas p1, p2, and p3.
 	A magnitude do vetor normal é igual a area do paralelograma definido por p1, p2 e p3
 	*/
-	Vector3 calcTriangleNormal(Vertice *p1,Vertice *p2,Vertice *p3);
+	Vector3 calcTrianguloNormal(Vertice *p1,Vertice *p2,Vertice *p3);
 
 	/* Método usado pelo aplicaVento() para calcular a força do vendo em um único triângulo, definido por 
 	p1,p2,p3*/
-	void addWindForcesForTriangle(Vertice *p1,Vertice *p2,Vertice *p3, const Vector3 direction);
+	void addVentoTriangulo(Vertice *p1,Vertice *p2,Vertice *p3, const Vector3 direction);
 
 	/* Método usado pelo drawShaded pra pintar um triângulo com uma cor*/
-	void drawTriangle(Vertice *p1, Vertice *p2, Vertice *p3, const Vector3 color);
+	void desenhaTriangulo(Vertice *p1, Vertice *p2, Vertice *p3, const Vector3 color);
 
-	void spherizeVertice(Vertice Vertice, float sphereRadius); //Mostra uma esfera na particula para identificá-la
+	void esferizaVertice(Vertice Vertice, float sphereRadius); //Mostra uma esfera na particula para identificá-la
 
 public:
 		
-	MassaMola(float width, float height, int num_vertices_width, int num_vertices_height) : num_vertices_width(num_vertices_width), num_vertices_height(num_vertices_height)
+	MassaMola(float width, float height, int num_vertices_width, int num_vertices_height, float massaTotal) : num_vertices_width(num_vertices_width), num_vertices_height(num_vertices_height)
 	{
-		inicializa(width, height);
+		inicializa(width, height, massaTotal);
 	}
 
-	void inicializa(int width, int height);
+	void inicializa(int width, int height, float massaTotal);
 	
-	void toggleSpherizedVertice();
+	void alternaVerticeEsferizado();
 
 	/* desenha o tecido como uma malha smooth shaded (e colorido de acordo com a cor)  triangular OPEN GL
 	Chamado pelo método display()

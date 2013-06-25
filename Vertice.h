@@ -20,7 +20,7 @@ private:
 
 
 public:
-	Vertice(Vector3 posicao) : posicao(posicao), old_posicao(posicao),aceleracao(Vector3(0,0,0)), massa(1), movimentavel(true), normal_acumulada(Vector3(0,0,0)), selecionada(false){}
+	Vertice(Vector3 posicao, float massa) : posicao(posicao), old_posicao(posicao),aceleracao(Vector3(0,0,0)), massa(massa), movimentavel(true), normal_acumulada(Vector3(0,0,0)), selecionada(false){}
 	Vertice() {}
 
 	void addForca(Vector3 f);
@@ -37,6 +37,10 @@ public:
 	Vector3& getPosicao();
 
 	void resetAceleracao();
+
+	Vector3 Vertice::getAceleracao();
+
+	float Vertice::getMassa();
 
 	void offsetPosicao(const Vector3 v);
 

@@ -4,7 +4,7 @@
 /***** Acima estão as definições das classes; Vector3, Vertice, Mola, and MassaMola *****/
 
  
-MassaMola massaMola(14,10,30,20); // Com esses valores ficou extremamente lento: 14, 10, 55, 45
+MassaMola massaMola(14,10,30,20, 60*20); // Com esses valores ficou extremamente lento: 14, 10, 55, 45
 
 /***** Toda a parte de controle opengl é feita abaixo *****/
 float view_distance = 2;
@@ -150,7 +150,7 @@ void keyboard( unsigned char key, int x, int y )
 		toggleWireframeMode();		
 		break;
 	case 'b':
-		massaMola.toggleSpherizedVertice();
+		massaMola.alternaVerticeEsferizado();
 		break;
 	default: 
 		break;

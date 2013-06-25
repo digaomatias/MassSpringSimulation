@@ -1,11 +1,14 @@
 #include "MassaMola.h"
 
-	void MassaMola::inicializa(int width, int height)
+	void MassaMola::inicializa(int width, int height, float massaTotal)
 	{
 		spherized_Vertice = false;
 		selected_x = 0;
 		selected_y = 0;
-		Vertices.resize(num_vertices_width*num_vertices_height); //Array contendo todas as partículas
+		int total_vertices = num_vertices_width*num_vertices_height;
+		Vertices.resize(total_vertices); //Array contendo todas as partículas
+
+		float vmassa = massaTotal/total_vertices;
 
 		// criando partículas em um grid de particulas (0,0,0) até (width,-height,0)
 		for(int x=0; x<num_vertices_width; x++)
@@ -15,7 +18,7 @@
 				Vector3 pos = Vector3(width * (x/(float)num_vertices_width),
 								-height * (y/(float)num_vertices_height),
 								0);
-				Vertices[y*num_vertices_width+x]= Vertice(pos); // insere partículas na coluna x e linha y
+				Vertices[y*num_vertices_width+x]= Vertice(pos, vmassa); // insere partículas na coluna x e linha y
 				//a primeira particula tem que ser selecionada
 				if(y == 0 && x == 0)
 					Vertices[y*num_vertices_width+x].toggleSelecionado();
@@ -62,11 +65,11 @@
 	void MassaMola::criaMola(Vertice *p1, Vertice *p2) {constraints.push_back(Mola(p1,p2));}
 
 
-	/* Método usado por drawShaded() e addWindForcesForTriangle() pra calcular o
+	/* Método usado por drawShaded() e addVentoTriangulo() pra calcular o
 	vetor normal do triângulo definido pela posição das partículas p1, p2, and p3.
 	A magnitude do vetor normal é igual a area do paralelograma definido por p1, p2 e p3
 	*/
-	Vector3 MassaMola::calcTriangleNormal(Vertice *p1,Vertice *p2,Vertice *p3)
+	Vector3 MassaMola::calcTrianguloNormal(Vertice *p1,Vertice *p2,Vertice *p3)
 	{
 		Vector3 pos1 = p1->getPosicao();
 		Vector3 pos2 = p2->getPosicao();
@@ -80,9 +83,9 @@
 
 	/* Método usado pelo aplicaVento() para calcular a força do vendo em um único triângulo, definido por 
 	p1,p2,p3*/
-	void MassaMola::addWindForcesForTriangle(Vertice *p1,Vertice *p2,Vertice *p3, const Vector3 direction)
+	void MassaMola::addVentoTriangulo(Vertice *p1,Vertice *p2,Vertice *p3, const Vector3 direction)
 	{
-		Vector3 normal = calcTriangleNormal(p1,p2,p3);
+		Vector3 normal = calcTrianguloNormal(p1,p2,p3);
 		Vector3 d = normal.normalized();
 		Vector3 force = normal*(d.dot(direction));
 		p1->addForca(force);
@@ -91,7 +94,7 @@
 	}
 
 	/* Método usado pelo drawShaded pra pintar um triângulo com uma cor*/
-	void MassaMola::drawTriangle(Vertice *p1, Vertice *p2, Vertice *p3, const Vector3 color)
+	void MassaMola::desenhaTriangulo(Vertice *p1, Vertice *p2, Vertice *p3, const Vector3 color)
 	{
 		glColor3fv( (GLfloat*) &color );
 
@@ -105,7 +108,7 @@
 		glVertex3fv((GLfloat *) &(p3->getPosicao() ));
 	}
 
-	void MassaMola::spherizeVertice(Vertice Vertice, float sphereRadius) //Mostra uma esfera na particula para identificá-la
+	void MassaMola::esferizaVertice(Vertice Vertice, float sphereRadius) //Mostra uma esfera na particula para identificá-la
 	{
 		glPushMatrix();
 		glTranslatef(Vertice.getPosicao().f[0], Vertice.getPosicao().f[1], Vertice.getPosicao().f[2]); //Posiciona a esfera glut na posição da particula
@@ -117,7 +120,7 @@
 		glPopMatrix();
 	}
 		
-	void MassaMola::toggleSpherizedVertice()
+	void MassaMola::alternaVerticeEsferizado()
 	{
 		spherized_Vertice = !spherized_Vertice;
 	}
@@ -140,12 +143,12 @@
 		{
 			for(int y=0; y<num_vertices_height-1; y++)
 			{
-				Vector3 normal = calcTriangleNormal(getVertice(x+1,y),getVertice(x,y),getVertice(x,y+1));
+				Vector3 normal = calcTrianguloNormal(getVertice(x+1,y),getVertice(x,y),getVertice(x,y+1));
 				getVertice(x+1,y)->adicionaNormal(normal);
 				getVertice(x,y)->adicionaNormal(normal);
 				getVertice(x,y+1)->adicionaNormal(normal);
 
-				normal = calcTriangleNormal(getVertice(x+1,y+1),getVertice(x+1,y),getVertice(x,y+1));
+				normal = calcTrianguloNormal(getVertice(x+1,y+1),getVertice(x+1,y),getVertice(x,y+1));
 				getVertice(x+1,y+1)->adicionaNormal(normal);
 				getVertice(x+1,y)->adicionaNormal(normal);
 				getVertice(x,y+1)->adicionaNormal(normal);
@@ -159,7 +162,7 @@
 				for(int y=0; y<num_vertices_height; y++)
 				{
 					//Cria as bolinhas nas partículas caso a opção esteja ligada
-					spherizeVertice(*getVertice(x, y), 0.07);
+					esferizaVertice(*getVertice(x, y), 0.07);
 				}
 			}
 		}
@@ -175,8 +178,8 @@
 				else
 					color = Vector3(1.0f,1.0f,1.0f);
 
-				drawTriangle(getVertice(x+1,y),getVertice(x,y),getVertice(x,y+1),color);
-				drawTriangle(getVertice(x+1,y+1),getVertice(x+1,y),getVertice(x,y+1),color);
+				desenhaTriangulo(getVertice(x+1,y),getVertice(x,y),getVertice(x,y+1),color);
+				desenhaTriangulo(getVertice(x+1,y+1),getVertice(x+1,y),getVertice(x,y+1),color);
 			}
 		}
 		glEnd();
@@ -219,8 +222,10 @@
 	{
 		Vertice* p = getVertice(selected_x, selected_y);		
 		Vector3 normal = p->getNormal();
+
 		Vector3 d = normal.normalized();
 		Vector3 force = normal*(d.dot(direction));
+
 		p->addForca(force);
 	}
 
@@ -230,9 +235,10 @@
 		for(int x = 0; x<num_vertices_width-1; x++)
 		{
 			for(int y=0; y<num_vertices_height-1; y++)
-			{
-				addWindForcesForTriangle(getVertice(x+1,y),getVertice(x,y),getVertice(x,y+1),direction);
-				addWindForcesForTriangle(getVertice(x+1,y+1),getVertice(x+1,y),getVertice(x,y+1),direction);
+			{				
+				addVentoTriangulo(getVertice(x+1,y+1),getVertice(x+1,y),getVertice(x,y+1),direction);
+
+				addVentoTriangulo(getVertice(x+1,y),getVertice(x,y),getVertice(x,y+1),direction);
 			}
 		}
 	}
